@@ -1,45 +1,67 @@
-
 #!/bin/bash
 
+# Benutzername abfragen
 echo "Bitte geben Sie Ihren Benutzernamen ein:"
 read username
 
-# Erstelle die udev-Regel
-echo 'ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEM=="block", RUN+="/home/$username/usb-vlc-playback.sh"' | sudo tee /etc/udev/rules.d/100-usb-autoplay.rules
+# Prüfen, ob VLC installiert ist, und falls nicht, installieren
+if ! command -v vlc &> /dev/null
+then
+    echo "VLC Media Player ist nicht installiert. Installation wird gestartet..."
+    sudo apt-get update
+    sudo apt-get install vlc -y
+else
+    echo "VLC Media Player ist bereits installiert."
+fi
 
-# Berechtigungen für VLC festlegen
-sudo usermod -a -G video $username
+# Einhängepunkt erstellen, falls nicht vorhanden
+if [ ! -d "/mnt/usb" ]; then
+    echo "Erstelle Einhängepunkt /mnt/usb..."
+    sudo mkdir -p /mnt/usb
+else
+    echo "Einhängepunkt /mnt/usb existiert bereits."
+fi
 
-# Skript zum Abspielen der Videos von USB mit VLC erstellen
-cat << 'EOF' > /home/$username/usb-vlc-playback.sh
+# USB-Autoplay-Skript erstellen
+cat << EOF | sudo tee /home/$username/usb-vlc-playback.sh > /dev/null
 #!/bin/bash
 
-# Der Pfad, an dem der USB-Stick eingehängt wird
 MOUNT_POINT=/mnt/usb
-
-# Warte kurz, um sicherzustellen, dass der USB-Stick eingehängt wurde
 sleep 5
 
-# Erstelle den Mount-Punkt, falls er noch nicht existiert
-mkdir -p $MOUNT_POINT
-
-# Finde die Device-Bezeichnung des USB-Sticks (z.B. /dev/sda1)
-DEVICE=$(lsblk -o NAME,LABEL | grep 'USB_LABEL' | awk '{print $1}')
-if [ ! -z "$DEVICE" ]; then
-    DEVICE="/dev/$DEVICE"
-    # Einhängen des USB-Sticks
-    mount $DEVICE $MOUNT_POINT
-
-    # Starte VLC in einer Endlosschleife für alle Videos auf dem USB-Stick
-    cvlc --fullscreen --loop $MOUNT_POINT/* &
-
-    # Optional: Aushängen des USB-Sticks, nachdem VLC beendet wurde
-    # umount $MOUNT_POINT
+USB_DEVICES_FOUND=\$(ls /dev/sd[a-z][1-9] 2> /dev/null)
+if [ -z "\$USB_DEVICES_FOUND" ]; then
+    echo "Kein USB-Stick erkannt."
+    exit 1
 fi
+
+for DEVICE in \$USB_DEVICES_FOUND; do
+    if ! mount | grep \$DEVICE > /dev/null; then
+        echo "USB-Stick erkannt. Starte Countdown von 5 Sekunden..."
+        for i in {5..1}; do
+            echo "\$i..."
+            sleep 1
+        done
+        echo "Versuche, \$DEVICE in \$MOUNT_POINT einzuhängen..."
+        mkdir -p \$MOUNT_POINT
+        if sudo mount \$DEVICE \$MOUNT_POINT; then
+            echo "\$DEVICE erfolgreich in \$MOUNT_POINT eingehängt."
+            DISPLAY=:0 cvlc --fullscreen --loop \$MOUNT_POINT/* &
+            exit 0
+        else
+            echo "Konnte \$DEVICE nicht in \$MOUNT_POINT einhängen."
+        fi
+    fi
+done
+
+echo "Kein USB-Stick zum Einhängen verfügbar."
 EOF
 
-# Mache das Skript ausführbar
+# Skript ausführbar machen
 chmod +x /home/$username/usb-vlc-playback.sh
+
+# udev-Regel hinzufügen
+echo 'ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", RUN+="/home/'$username'/usb-vlc-playback.sh"' | sudo tee /etc/udev/rules.d/100-usb-autoplay.rules > /dev/null
 
 # udev-Regeln neu laden
 sudo udevadm control --reload-rules
