@@ -5,8 +5,7 @@ echo "Bitte geben Sie Ihren Benutzernamen ein:"
 read username
 
 # Prüfen, ob VLC installiert ist, und falls nicht, installieren
-if ! command -v vlc &> /dev/null
-then
+if ! command -v vlc &> /dev/null; then
     echo "VLC Media Player ist nicht installiert. Installation wird gestartet..."
     sudo apt-get update
     sudo apt-get install vlc -y
@@ -14,57 +13,56 @@ else
     echo "VLC Media Player ist bereits installiert."
 fi
 
-# Einhängepunkt erstellen, falls nicht vorhanden
-if [ ! -d "/mnt/usb" ]; then
-    echo "Erstelle Einhängepunkt /mnt/usb..."
-    sudo mkdir -p /mnt/usb
-else
-    echo "Einhängepunkt /mnt/usb existiert bereits."
-fi
-
-# USB-Autoplay-Skript erstellen
-cat << EOF | sudo tee /home/$username/usb-vlc-playback.sh > /dev/null
+# Autoplay-Skript erstellen
+AUTOPLAY_SCRIPT="/home/$username/usb-vlc-playback.sh"
+cat << 'EOF' > "$AUTOPLAY_SCRIPT"
 #!/bin/bash
 
 MOUNT_POINT=/mnt/usb
+
+# Warte, bis ein USB-Gerät verbunden wird
+until ls /dev/sd[a-z][1-9] 2> /dev/null; do sleep 1; done
+
+echo "USB-Stick erkannt. Starte in 5 Sekunden..."
 sleep 5
 
-USB_DEVICES_FOUND=\$(ls /dev/sd[a-z][1-9] 2> /dev/null)
-if [ -z "\$USB_DEVICES_FOUND" ]; then
-    echo "Kein USB-Stick erkannt."
-    exit 1
-fi
+# Versuche, das erste verfügbare USB-Speichergerät einzuhängen
+DEVICE=$(ls /dev/sd[a-z][1-9] 2> /dev/null | head -n 1)
+sudo mount $DEVICE $MOUNT_POINT
 
-for DEVICE in \$USB_DEVICES_FOUND; do
-    if ! mount | grep \$DEVICE > /dev/null; then
-        echo "USB-Stick erkannt. Starte Countdown von 5 Sekunden..."
-        for i in {5..1}; do
-            echo "\$i..."
-            sleep 1
-        done
-        echo "Versuche, \$DEVICE in \$MOUNT_POINT einzuhängen..."
-        mkdir -p \$MOUNT_POINT
-        if sudo mount \$DEVICE \$MOUNT_POINT; then
-            echo "\$DEVICE erfolgreich in \$MOUNT_POINT eingehängt."
-            DISPLAY=:0 cvlc --fullscreen --loop \$MOUNT_POINT/* &
-            exit 0
-        else
-            echo "Konnte \$DEVICE nicht in \$MOUNT_POINT einhängen."
-        fi
-    fi
-done
+# Starte VLC für alle Videos auf dem USB-Stick
+DISPLAY=:0 cvlc --fullscreen --loop $MOUNT_POINT/* &
 
-echo "Kein USB-Stick zum Einhängen verfügbar."
+VLC_PID=$!
+
+# Warte, bis der USB-Stick entfernt wird
+while ls /dev/sd[a-z][1-9] | grep -q $(basename $DEVICE); do sleep 1; done
+
+echo "USB-Stick entfernt. Beende VLC."
+sudo umount $MOUNT_POINT
+kill $VLC_PID
 EOF
 
-# Skript ausführbar machen
-chmod +x /home/$username/usb-vlc-playback.sh
+chmod +x "$AUTOPLAY_SCRIPT"
 
-# udev-Regel hinzufügen
-echo 'ACTION=="add", KERNEL=="sd[a-z][0-9]", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", RUN+="/home/'$username'/usb-vlc-playback.sh"' | sudo tee /etc/udev/rules.d/100-usb-autoplay.rules > /dev/null
+# systemd Service-Datei erstellen
+SERVICE_FILE="/etc/systemd/system/usb-vlc-autoplay.service"
+cat << EOF | sudo tee "$SERVICE_FILE" > /dev/null
+[Unit]
+Description=USB VLC Autoplay Service
+After=multi-user.target
 
-# udev-Regeln neu laden
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+[Service]
+User=$username
+Type=simple
+ExecStart=/bin/bash $AUTOPLAY_SCRIPT
 
-echo "Installation abgeschlossen. Bitte stecken Sie den USB-Stick an, um die Videowiedergabe zu testen."
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# systemd Service aktivieren und starten
+sudo systemctl enable usb-vlc-autoplay.service
+sudo systemctl start usb-vlc-autoplay.service
+
+echo "Installation und Service-Einrichtung abgeschlossen."
