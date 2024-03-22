@@ -4,14 +4,17 @@
 echo "Bitte geben Sie den Benutzernamen ein, der für die Installation verwendet wurde:"
 read username
 
-# Entfernen der udev-Regel
-sudo rm -f /etc/udev/rules.d/100-usb-autoplay.rules
+# systemd Service deaktivieren und stoppen
+sudo systemctl stop usb-vlc-autoplay.service
+sudo systemctl disable usb-vlc-autoplay.service
 
-# Entfernen des USB-Autoplay-Skripts
+# systemd Service-Datei entfernen
+sudo rm -f /etc/systemd/system/usb-vlc-autoplay.service
+
+# Autoplay-Skript entfernen
 rm -f /home/$username/usb-vlc-playback.sh
 
-# udev-Regeln neu laden
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+# systemd Daemon neu laden
+sudo systemctl daemon-reload
 
 echo "Deinstallation abgeschlossen. Alle Änderungen wurden rückgängig gemacht."
