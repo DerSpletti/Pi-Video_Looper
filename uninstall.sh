@@ -4,17 +4,15 @@
 echo "Bitte geben Sie den Benutzernamen ein, der für die Installation verwendet wurde:"
 read username
 
-# systemd Service deaktivieren und stoppen
-sudo systemctl stop usb-vlc-autoplay.service
-sudo systemctl disable usb-vlc-autoplay.service
+# Entfernen des Autoplay-Skripts
+AUTOPLAY_SCRIPT_PATH="/home/$username/usb-vlc-playback.sh"
+rm -f "$AUTOPLAY_SCRIPT_PATH"
 
-# systemd Service-Datei entfernen
-sudo rm -f /etc/systemd/system/usb-vlc-autoplay.service
-
-# Autoplay-Skript entfernen
-rm -f /home/$username/usb-vlc-playback.sh
-
-# systemd Daemon neu laden
+# Deaktivieren des systemd Service für Autologin
+sudo systemctl disable autologin@tty1.service
 sudo systemctl daemon-reload
 
-echo "Deinstallation abgeschlossen. Alle Änderungen wurden rückgängig gemacht."
+# Entfernen des Autoplay-Skripts aus der .bashrc
+sed -i "/usb-vlc-playback.sh/d" /home/$username/.bashrc
+
+echo "Deinstallation abgeschlossen. Die vorgenommenen Änderungen wurden rückgängig gemacht."
