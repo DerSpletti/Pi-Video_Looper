@@ -4,9 +4,9 @@
 echo "Bitte geben Sie Ihren Benutzernamen ein:"
 read username
 
-# Prüfen, ob VLC installiert ist, und falls nicht, installieren
+# VLC installieren, falls nicht vorhanden
 if ! command -v vlc &> /dev/null; then
-    echo "VLC Media Player ist nicht installiert. Installation wird gestartet..."
+    echo "VLC Media Player wird installiert..."
     sudo apt-get update
     sudo apt-get install vlc -y
 else
@@ -14,55 +14,51 @@ else
 fi
 
 # Autoplay-Skript erstellen
-AUTOPLAY_SCRIPT="/home/$username/usb-vlc-playback.sh"
-cat << 'EOF' > "$AUTOPLAY_SCRIPT"
+AUTOPLAY_SCRIPT_PATH="/home/$username/usb-vlc-playback.sh"
+cat << 'EOF' > "$AUTOPLAY_SCRIPT_PATH"
 #!/bin/bash
 
-MOUNT_POINT=/mnt/usb
+MOUNT_POINT="/mnt/usb"
 
-# Warte, bis ein USB-Gerät verbunden wird
-until ls /dev/sd[a-z][1-9] 2> /dev/null; do sleep 1; done
+# Sicherstellen, dass der Mount-Point existiert
+mkdir -p "$MOUNT_POINT"
 
-echo "USB-Stick erkannt. Starte in 5 Sekunden..."
-sleep 5
-
-# Versuche, das erste verfügbare USB-Speichergerät einzuhängen
-DEVICE=$(ls /dev/sd[a-z][1-9] 2> /dev/null | head -n 1)
-sudo mount $DEVICE $MOUNT_POINT
-
-# Starte VLC für alle Videos auf dem USB-Stick
-DISPLAY=:0 cvlc --fullscreen --loop $MOUNT_POINT/* &
-
-VLC_PID=$!
-
-# Warte, bis der USB-Stick entfernt wird
-while ls /dev/sd[a-z][1-9] | grep -q $(basename $DEVICE); do sleep 1; done
-
-echo "USB-Stick entfernt. Beende VLC."
-sudo umount $MOUNT_POINT
-kill $VLC_PID
+# Loop, um auf das Anstecken von USB-Geräten zu warten und diese automatisch einzuhängen
+while true; do
+    DEVICE=$(ls /dev/sd[a-z][1-9] 2>/dev/null | head -n 1)
+    if [ ! -z "$DEVICE" ] && mount | grep "$DEVICE" > /dev/null; then
+        echo "Ein USB-Gerät ist bereits eingehängt."
+    elif [ ! -z "$DEVICE" ]; then
+        echo "Ein USB-Gerät wurde erkannt. Versuche, es einzuhängen..."
+        if sudo mount "$DEVICE" "$MOUNT_POINT"; then
+            echo "$DEVICE erfolgreich in $MOUNT_POINT eingehängt."
+            DISPLAY=:0 cvlc --fullscreen --loop "$MOUNT_POINT"/* &
+            VLC_PID=$!
+            wait $VLC_PID
+            echo "VLC beendet. USB-Gerät wird ausgehängt..."
+            sudo umount "$MOUNT_POINT"
+        else
+            echo "Konnte $DEVICE nicht in $MOUNT_POINT einhängen."
+        fi
+    fi
+    sleep 5
+done
 EOF
 
-chmod +x "$AUTOPLAY_SCRIPT"
+chmod +x "$AUTOPLAY_SCRIPT_PATH"
 
-# systemd Service-Datei erstellen
-SERVICE_FILE="/etc/systemd/system/usb-vlc-autoplay.service"
-cat << EOF | sudo tee "$SERVICE_FILE" > /dev/null
-[Unit]
-Description=USB VLC Autoplay Service
-After=multi-user.target
-
+# Einrichten des systemd Service für Autologin und Start des Skripts
+sudo bash -c "cat > /etc/systemd/system/autologin@.service" <<EOL
 [Service]
-User=$username
-Type=simple
-ExecStart=/bin/bash $AUTOPLAY_SCRIPT
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $username --noclear %I \$TERM
+Type=idle
+EOL
 
-[Install]
-WantedBy=multi-user.target
-EOF
+sudo systemctl daemon-reload
+sudo systemctl enable autologin@tty1.service
 
-# systemd Service aktivieren und starten
-sudo systemctl enable usb-vlc-autoplay.service
-sudo systemctl start usb-vlc-autoplay.service
+# Hinzufügen des Autoplay-Skripts zur .bashrc für automatische Ausführung
+echo "$AUTOPLAY_SCRIPT_PATH" >> /home/$username/.bashrc
 
-echo "Installation und Service-Einrichtung abgeschlossen."
+echo "Installation abgeschlossen. Der Raspberry Pi wird das Autoplay-Skript beim Booten automatisch ausführen."
