@@ -1,64 +1,93 @@
 #!/bin/bash
 
 # Benutzername abfragen
-echo "Bitte geben Sie Ihren Benutzernamen ein:"
-read username
+read -p "Bitte geben Sie Ihren Benutzernamen ein: " username
 
-# VLC installieren, falls nicht vorhanden
-if ! command -v vlc &> /dev/null; then
-    echo "VLC Media Player wird installiert..."
+# Python3 und VLC installieren, falls nicht vorhanden
+if ! command -v python3 &> /dev/null; then
+    echo "Installiere Python3..."
     sudo apt-get update
+    sudo apt-get install python3 -y
+else
+    echo "Python3 ist bereits installiert."
+fi
+
+if ! command -v vlc &> /dev/null; then
+    echo "Installiere VLC Media Player..."
     sudo apt-get install vlc -y
 else
     echo "VLC Media Player ist bereits installiert."
 fi
 
 # Autoplay-Skript erstellen
-AUTOPLAY_SCRIPT_PATH="/home/$username/usb-vlc-playback.sh"
-cat << 'EOF' > "$AUTOPLAY_SCRIPT_PATH"
-#!/bin/bash
+autoplay_script_path="/home/$username/usb-vlc-playback.py"
+cat << 'EOF' > "$autoplay_script_path"
+#!/usr/bin/env python3
+import os
+import subprocess
+import time
 
-MOUNT_POINT="/mnt/usb"
+MOUNT_POINT = "/mnt/usb"
+VLC_COMMAND = "cvlc --fullscreen --loop"
 
-# Sicherstellen, dass der Mount-Point existiert
-mkdir -p "$MOUNT_POINT"
+if not os.path.exists(MOUNT_POINT):
+    os.makedirs(MOUNT_POINT)
 
-# Loop, um auf das Anstecken von USB-Geräten zu warten und diese automatisch einzuhängen
-while true; do
-    DEVICE=$(ls /dev/sd[a-z][1-9] 2>/dev/null | head -n 1)
-    if [ ! -z "$DEVICE" ] && mount | grep "$DEVICE" > /dev/null; then
-        echo "Ein USB-Gerät ist bereits eingehängt."
-    elif [ ! -z "$DEVICE" ]; then
-        echo "Ein USB-Gerät wurde erkannt. Versuche, es einzuhängen..."
-        if sudo mount "$DEVICE" "$MOUNT_POINT"; then
-            echo "$DEVICE erfolgreich in $MOUNT_POINT eingehängt."
-            DISPLAY=:0 cvlc --fullscreen --loop "$MOUNT_POINT"/* &
-            VLC_PID=$!
-            wait $VLC_PID
-            echo "VLC beendet. USB-Gerät wird ausgehängt..."
-            sudo umount "$MOUNT_POINT"
-        else
-            echo "Konnte $DEVICE nicht in $MOUNT_POINT einhängen."
-        fi
-    fi
-    sleep 5
-done
+def find_usb_device():
+    for dev in os.listdir('/dev'):
+        if dev.startswith('sd'):
+            dev_path = f"/dev/{dev}"
+            if not any(dev_path in line for line in subprocess.run(['mount'], capture_output=True, text=True).stdout.splitlines()):
+                return dev_path
+    return None
+
+def mount_device(device):
+    result = subprocess.run(['sudo', 'mount', device, MOUNT_POINT])
+    return result.returncode == 0
+
+def umount_device():
+    subprocess.run(['sudo', 'umount', MOUNT_POINT])
+
+def play_media():
+    subprocess.Popen([VLC_COMMAND, f"{MOUNT_POINT}/*"], shell=True)
+
+def device_removed(device):
+    return not os.path.exists(device)
+
+while True:
+    device = find_usb_device()
+    if device and mount_device(device):
+        print(f"{device} eingehängt. Starte Wiedergabe.")
+        play_media()
+        while not device_removed(device):
+            time.sleep(1)
+        print(f"{device} entfernt. Stoppe Wiedergabe.")
+        umount_device()
+    else:
+        time.sleep(5)
 EOF
 
-chmod +x "$AUTOPLAY_SCRIPT_PATH"
+chmod +x "$autoplay_script_path"
 
-# Einrichten des systemd Service für Autologin und Start des Skripts
-sudo bash -c "cat > /etc/systemd/system/autologin@.service" <<EOL
+# systemd Service-Datei erstellen
+service_path="/etc/systemd/system/usb-vlc-autoplay.service"
+sudo bash -c "cat > $service_path" <<EOF
+[Unit]
+Description=USB VLC Autoplay Service
+After=multi-user.target
+
 [Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $username --noclear %I \$TERM
-Type=idle
-EOL
+User=$username
+ExecStart=/usr/bin/python3 $autoplay_script_path
+Restart=always
 
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Systemd Service aktivieren und starten
 sudo systemctl daemon-reload
-sudo systemctl enable autologin@tty1.service
+sudo systemctl enable usb-vlc-autoplay.service
+sudo systemctl start usb-vlc-autoplay.service
 
-# Hinzufügen des Autoplay-Skripts zur .bashrc für automatische Ausführung
-echo "$AUTOPLAY_SCRIPT_PATH" >> /home/$username/.bashrc
-
-echo "Installation abgeschlossen. Der Raspberry Pi wird das Autoplay-Skript beim Booten automatisch ausführen."
+echo "Installation abgeschlossen."
