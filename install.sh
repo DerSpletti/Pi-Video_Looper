@@ -52,4 +52,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable usb-autoplay.service
 sudo systemctl start usb-autoplay.service
 
-echo "Installation abgeschlossen."
+# Autologin für den Benutzer konfigurieren
+sudo systemctl set-default multi-user.target
+sudo systemctl edit getty@tty1 --full --force <<EOL
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $username --noclear %I \$TERM
+EOL
+
+echo "Installation und Autologin-Konfiguration abgeschlossen."
