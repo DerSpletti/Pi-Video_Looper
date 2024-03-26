@@ -14,13 +14,4 @@ rm -f "$autoplay_script_path"
 
 # Entfernen des Mount-Punktes
 echo "Entferne Mount-Punkt..."
-sudo rm -rf /mnt/usb
-
-# Entfernen der Autologin-Konfiguration
-echo "Entferne Autologin-Konfiguration..."
-sudo rm -rf /etc/systemd/system/getty@tty1.service.d
-
-sudo systemctl daemon-reload
-sudo systemctl reset-failed
-
-echo "Deinstallation abgeschlossen. Alle vorgenommenen Änderungen wurden rückgängig gemacht."
+sudo rm -
