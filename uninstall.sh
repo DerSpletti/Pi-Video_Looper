@@ -1,32 +1,26 @@
 #!/bin/bash
 
-# Systemd Service für das Autoplay stoppen und deaktivieren
+# Stoppen und Deaktivieren des systemd Service
+echo "Stoppe und deaktiviere systemd Service für Autoplay..."
 sudo systemctl stop usb-autoplay.service
 sudo systemctl disable usb-autoplay.service
+sudo rm /etc/systemd/system/usb-autoplay.service
 
-# systemd Service-Datei entfernen
-sudo rm -f /etc/systemd/system/usb-autoplay.service
-
-# systemd Konfiguration neu laden
-sudo systemctl daemon-reload
-sudo systemctl reset-failed
-
-# Fordere Benutzernamen an, der für die Installation verwendet wurde
+# Entfernen des Autoplay-Skripts
+echo "Entferne USB-Autoplay-Skript..."
 read -p "Bitte geben Sie den Benutzernamen ein, der für die Installation verwendet wurde: " username
-
-# Entferne das Autoplay-Skript
 autoplay_script_path="/home/$username/usb-vlc-playback.py"
 rm -f "$autoplay_script_path"
 
-# Entferne den Mount-Punkt
+# Entfernen des Mount-Punktes
+echo "Entferne Mount-Punkt..."
 sudo rm -rf /mnt/usb
 
-# Entferne die Autologin-Konfiguration, wenn sie über eine override.conf Datei konfiguriert wurde
-if [ -d "/etc/systemd/system/getty@tty1.service.d" ]; then
-    sudo rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
-fi
+# Entfernen der Autologin-Konfiguration
+echo "Entferne Autologin-Konfiguration..."
+sudo rm -rf /etc/systemd/system/getty@tty1.service.d
 
-# Optional: Setze systemd Target zurück, wenn es während der Installation geändert wurde
-# sudo systemctl set-default graphical.target
+sudo systemctl daemon-reload
+sudo systemctl reset-failed
 
 echo "Deinstallation abgeschlossen. Alle vorgenommenen Änderungen wurden rückgängig gemacht."
