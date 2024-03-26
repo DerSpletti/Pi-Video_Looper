@@ -44,7 +44,7 @@ def umount_device():
 def play_media():
     media_files = [os.path.join(MOUNT_POINT, f) for f in os.listdir(MOUNT_POINT) if os.path.isfile(os.path.join(MOUNT_POINT, f))]
     if media_files:
-        command = [VLC_PATH, '--fullscreen', '--loop'] + media_files
+        command = [VLC_PATH, '--fullscreen', '--loop',  '--no-video-title-show'] + media_files
         subprocess.Popen(command)
     else:
         print("No media files found on the USB device.")
