@@ -26,7 +26,7 @@ import time
 # Konfigurationsvariablen
 MOUNT_POINT = "/mnt/usb"
 NO_USB_IMAGE_PATH = "/home/spletti/Pi-Video_Looper//no_usb.png"  # Aktualisiere diesen Pfad
-VLC_PATH = subprocess.getoutput('which cvlc')  # Verwendet 'vlc' statt 'cvlc' falls 'cvlc' nicht gefunden wird
+VLC_PATH = subprocess.getoutput('which cvlc')  # Verwendet 'cvlc' statt 'vlc' falls 'cvlc' nicht gefunden wird
 FEH_PROCESS = None
 
 def find_usb_device():
