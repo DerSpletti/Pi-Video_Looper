@@ -13,5 +13,3 @@ autoplay_script_path="/home/$username/usb-vlc-playback.py"
 rm -f "$autoplay_script_path"
 
 # Entfernen des Mount-Punktes
-echo "Entferne Mount-Punkt..."
-sudo rm -
