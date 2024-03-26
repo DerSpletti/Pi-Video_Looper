@@ -21,6 +21,7 @@ cat << 'EOF' > "$autoplay_script_path"
 import os
 import subprocess
 import time
+import glob
 
 MOUNT_POINT = "/mnt/usb"
 VLC_COMMAND = "cvlc --fullscreen --loop"
@@ -46,7 +47,12 @@ def umount_device():
         os.rmdir(MOUNT_POINT)
 
 def play_media():
-    subprocess.run([VLC_COMMAND, f"{MOUNT_POINT}/*"], shell=True)
+    media_files = glob.glob(f"{MOUNT_POINT}/*")
+    if media_files:
+        command = ["cvlc", "--fullscreen", "--loop"] + media_files
+        subprocess.Popen(command)
+    else:
+        print("Keine Mediendateien gefunden.")
 
 while True:
     devices = list(find_usb_device())
@@ -76,6 +82,7 @@ After=multi-user.target
 
 [Service]
 User=$username
+Environment="DISPLAY=:0"
 ExecStart=/usr/bin/python3 $autoplay_script_path
 Restart=always
 
