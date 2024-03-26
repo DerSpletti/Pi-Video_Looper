@@ -1,37 +1,29 @@
 #!/bin/bash
 
-# Benutzername für Autologin und Autoplay-Skript
-read -p "Bitte geben Sie Ihren Benutzernamen ein: " username
+echo "Bitte geben Sie Ihren Benutzernamen ein: "
+read username
 
-# Python3 und VLC installieren, falls nicht vorhanden
-if ! command -v python3 &> /dev/null; then
-    echo "Installiere Python3..."
-    sudo apt-get update && sudo apt-get install python3 -y
-else
-    echo "Python3 ist bereits installiert."
-fi
+# Überprüfen und Installieren von Python3 und VLC
+echo "Überprüfe und installiere Python3 und VLC..."
+sudo apt-get update
+sudo apt-get install -y python3 vlc
 
-if ! command -v vlc &> /dev/null; then
-    echo "Installiere VLC Media Player..."
-    sudo apt-get install vlc -y
-else
-    echo "VLC Media Player ist bereits installiert."
-fi
-
-# Erstelle den Mount-Punkt mit den richtigen Berechtigungen
+# Erstellen des Mount-Punktes
+echo "Erstelle Mount-Punkt..."
 sudo mkdir -p /mnt/usb
 sudo chown "$username":"$username" /mnt/usb
 
-# Autoplay-Skript erstellen
+# Erstellen und Konfigurieren des Autoplay-Skripts
+echo "Erstelle USB-Autoplay-Skript..."
 autoplay_script_path="/home/$username/usb-vlc-playback.py"
 cat << 'EOF' > "$autoplay_script_path"
 #!/usr/bin/env python3
 # Python-Skript Inhalt hier einfügen
 EOF
-
 chmod +x "$autoplay_script_path"
 
-# systemd Service-Datei für Autoplay erstellen
+# Erstellen und Aktivieren des systemd Service
+echo "Konfiguriere systemd Service für Autoplay..."
 service_path="/etc/systemd/system/usb-autoplay.service"
 sudo bash -c "cat > $service_path" <<EOF
 [Unit]
@@ -46,18 +38,14 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Systemd Service aktivieren und starten
 sudo systemctl daemon-reload
 sudo systemctl enable usb-autoplay.service
 sudo systemctl start usb-autoplay.service
 
-# Autologin für den Benutzer konfigurieren
-sudo systemctl set-default multi-user.target
-sudo systemctl edit getty@tty1 --full --force <<EOL
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $username --noclear %I \$TERM
-EOL
+# Konfigurieren des Autologins
+echo "Konfiguriere Autologin..."
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+echo -e "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin $username --noclear %I \$TERM" | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null
+sudo systemctl daemon-reload
 
 echo "Installation und Autologin-Konfiguration abgeschlossen."
