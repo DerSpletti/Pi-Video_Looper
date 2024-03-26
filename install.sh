@@ -18,7 +18,51 @@ echo "Erstelle USB-Autoplay-Skript..."
 autoplay_script_path="/home/$username/usb-vlc-playback.py"
 cat << 'EOF' > "$autoplay_script_path"
 #!/usr/bin/env python3
-# Python-Skript Inhalt hier einfügen
+import os
+import subprocess
+import time
+
+MOUNT_POINT = "/mnt/usb"
+VLC_COMMAND = "cvlc --fullscreen --loop"
+
+def is_mounted(device):
+    return subprocess.run(['mountpoint', '-q', device]).returncode == 0
+
+def find_usb_device():
+    for device in os.listdir('/dev'):
+        if device.startswith('sd'):
+            dev_path = os.path.join('/dev', device)
+            if device[-1].isdigit():
+                yield dev_path
+
+def mount_device(device):
+    if not os.path.exists(MOUNT_POINT):
+        os.makedirs(MOUNT_POINT)
+    subprocess.run(['sudo', 'mount', device, MOUNT_POINT])
+
+def umount_device():
+    subprocess.run(['sudo', 'umount', MOUNT_POINT])
+    if os.path.exists(MOUNT_POINT):
+        os.rmdir(MOUNT_POINT)
+
+def play_media():
+    subprocess.run([VLC_COMMAND, f"{MOUNT_POINT}/*"], shell=True)
+
+while True:
+    devices = list(find_usb_device())
+    if devices:
+        for device in devices:
+            if not is_mounted(device):
+                print(f"Mounting {device} and playing media.")
+                mount_device(device)
+                play_media()
+                while is_mounted(device):
+                    time.sleep(1)
+                umount_device()
+                print(f"Device {device} removed.")
+    else:
+        print("Waiting for USB device...")
+    time.sleep(5)
 EOF
 chmod +x "$autoplay_script_path"
 
