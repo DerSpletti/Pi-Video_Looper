@@ -26,6 +26,14 @@ import time
 MOUNT_POINT = "/mnt/usb"
 VLC_PATH = subprocess.getoutput('which cvlc')
 
+def device_still_connected(device):
+    return os.path.exists(device)
+
+def find_mounted_devices():
+    result = subprocess.run(['lsblk', '-o', 'MOUNTPOINT'], capture_output=True, text=True)
+    mounted = result.stdout.split('\n')
+    return MOUNT_POINT in mounted
+
 def find_usb_device():
     for device in os.listdir('/dev'):
         if device.startswith('sd') and device[-1].isdigit():
@@ -44,25 +52,31 @@ def umount_device():
 def play_media():
     media_files = [os.path.join(MOUNT_POINT, f) for f in os.listdir(MOUNT_POINT) if os.path.isfile(os.path.join(MOUNT_POINT, f))]
     if media_files:
-        command = [VLC_PATH, '--fullscreen', '--loop',  '--no-video-title-show'] + media_files
-        subprocess.Popen(command)
+        command = [VLC_PATH, '--fullscreen', '--loop', '--no-video-title-show'] + media_files
+        process = subprocess.Popen(command)
+        return process
     else:
         print("No media files found on the USB device.")
+        return None
 
 while True:
     devices = list(find_usb_device())
     if devices:
         for device in devices:
-            try:
-                mount_device(device)
-                play_media()
-                while os.path.exists(device):
+            mount_device(device)
+            if find_mounted_devices():
+                process = play_media()
+                while device_still_connected(device):
                     time.sleep(1)
+                if process:
+                    process.terminate()
+                    time.sleep(1)  # Kurze Pause, um sicherzustellen, dass VLC geschlossen wird
                 umount_device()
                 print(f"Device {device} removed.")
-            except Exception as e:
-                print(f"Error: {e}")
+    else:
+        print("Waiting for USB device...")
     time.sleep(5)
+
 EOF
 chmod +x "$autoplay_script_path"
 
