@@ -23,7 +23,7 @@ import subprocess
 import time
 
 MOUNT_POINT = "/mnt/usb"
-VLC_PATH = subprocess.getoutput('which vlc')
+VLC_PATH = 'cvlc'  # Verwende explizit cvlc für die Wiedergabe
 
 def find_usb_device():
     for device in os.listdir('/dev'):
@@ -78,3 +78,14 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
+sudo systemctl daemon-reload
+sudo systemctl enable usb-autoplay.service
+sudo systemctl start usb-autoplay.service
+
+# Konfigurieren des Autologins für den Benutzer
+echo "Konfiguriere Autologin für den Benutzer $username..."
+sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
+echo -e "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin $username --noclear %I \$TERM" | sudo tee /etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null
+sudo systemctl daemon-reload
+
+echo "Installation und Autologin-Konfiguration abgeschlossen."
